@@ -45,7 +45,7 @@ def increment(provider_id: str, window: str) -> int:
     try:
         conn.execute(
             """INSERT INTO quota_counters (provider_id, window_start, count) VALUES (?, ?, 1)
-               ON CONFLICT(provider_id, window_start) DO UPDATE SET count = count + 1""",
+               ON CONFLICT(provider_id, window_start) DO UPDATE SET count = quota_counters.count + 1""",
             (provider_id, ws),
         )
         conn.commit()
