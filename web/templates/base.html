@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Carrossel IA{% endblock %}</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%235046e5'/%3E%3Crect x='6' y='10' width='14' height='17' rx='2' fill='white' opacity='0.5'/%3E%3Crect x='12' y='6' width='14' height='17' rx='2' fill='white'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <span class="mark">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="14" height="15" rx="2" opacity="0.55"></rect><rect x="8" y="2" width="14" height="15" rx="2"></rect></svg>
+        </span>
+        <div>
+          <span class="brand-name">Carrossel IA</span>
+          <span class="brand-tag">uso pessoal</span>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="/" class="nav-item {{ 'active' if active_page == 'create' else '' }}">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+          Criar
+        </a>
+        <a href="/biblioteca" class="nav-item {{ 'active' if active_page == 'library' else '' }}">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+          Biblioteca
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        Todas as IAs usadas aqui são gratuitas.
+      </div>
+    </aside>
+
+    <div class="main-area">
+      <header class="topbar">
+        <h1>{% block page_title %}{% endblock %}</h1>
+        <p class="subtitle">{% block page_subtitle %}{% endblock %}</p>
+      </header>
+      <main class="content">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

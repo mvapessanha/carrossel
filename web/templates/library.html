@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Biblioteca — Carrossel IA{% endblock %}
+{% block page_title %}Biblioteca{% endblock %}
+{% block page_subtitle %}Todo carrossel e imagem que você já gerou, com os prompts usados em cada um.{% endblock %}
+
+{% block content %}
+<section id="library-list" class="job-list"></section>
+
+<section id="job-detail" class="card hidden">
+  <button id="back-to-list" class="ghost" style="margin-bottom: 1rem;">
+    <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+    Voltar
+  </button>
+  <div id="job-detail-content"></div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/library.js"></script>
+{% endblock %}

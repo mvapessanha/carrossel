@@ -1,0 +1,88 @@
+# Ordem da cadeia de fallback (melhor -> pior) e limites de cota.
+# "kind: hard" = a API tem um teto publicado, o contador bloqueia ao chegar no limite.
+# "kind: soft" = a API nao publica um teto, o limite aqui e' so um ritmo responsavel
+#   que a gente mesmo impoe pra nao abusar do servico gratuito.
+# Editar esse arquivo (ordem, limites, ligar/desligar um provedor) nao exige mexer em codigo.
+#
+# Descobertas em ago/2026, testando com chaves reais:
+# - Gemini: os 3 modelos de imagem disponiveis devolvem "limit: 0" no tier
+#   gratuito -- GERACAO DE IMAGEM DO GEMINI EXIGE BILLING (Blaze) ATIVADO,
+#   apesar da doc sugerir acesso gratuito. Fica com limit:0 (pulado automatico).
+# - Pollinations Kontext: exige cadastro gratuito no tier "Seed"
+#   (enter.pollinations.ai); mesmo com token, a autenticacao nao "pegou" nos
+#   testes (virou request anonima mesmo assim) -- pode ser bug do lado deles.
+# - Hugging Face (FLUX Kontext): alternativa gratuita real, conta sem cartao,
+#   cota mensal de creditos. So aceita 1 imagem de referencia por chamada.
+
+image_providers:
+  - id: gemini_nano_banana
+    module: gemini_nano_banana
+    label: "Gemini (Nano Banana 2)"
+    supports_reference: true
+    max_reference_images: 14
+    quota:
+      kind: hard
+      window: daily
+      limit: 1000  # so uma rede de seguranca contra bug/loop; quem realmente controla o gasto e' o budget_usd abaixo
+    cost_per_image_usd: 0.067  # gemini-3.1-flash-image, melhor modelo disponivel pra essa conta, com billing (Blaze) ativado
+    budget_usd: 10.0  # teto real de gasto TOTAL (nunca reseta) -- acima disso o provedor para de ser chamado automaticamente
+    requires_env: [GEMINI_API_KEY]
+
+  - id: hf_flux_kontext
+    module: hf_flux_kontext
+    label: "Hugging Face (FLUX Kontext)"
+    supports_reference: true
+    max_reference_images: 1
+    quota:
+      kind: hard
+      window: daily
+      limit: 2  # descoberto testando: cota gratuita real e' ~2 imagens/MES (nao por dia,
+      # nosso schema so suporta janela diaria/semanal); qualidade otima quando funciona,
+      # mas volume gratuito e' minusculo pra esse modelo especifico
+    requires_env: [HF_TOKEN]
+
+  - id: pollinations_kontext
+    module: pollinations_kontext
+    label: "Pollinations (Kontext)"
+    supports_reference: true
+    max_reference_images: 4
+    quota:
+      kind: soft
+      window: daily
+      limit: 300
+    requires_env: [POLLINATIONS_TOKEN]
+
+  - id: together_flux_schnell
+    module: together_flux_schnell
+    label: "Together (FLUX schnell)"
+    supports_reference: false
+    max_reference_images: 0
+    quota:
+      kind: soft
+      window: daily
+      limit: 1000
+    requires_env: [TOGETHER_API_KEY]
+
+  - id: pollinations_flux
+    module: pollinations_flux
+    label: "Pollinations (Flux)"
+    supports_reference: false
+    max_reference_images: 0
+    quota:
+      kind: soft
+      window: daily
+      limit: 500
+    requires_env: []
+
+planner:
+  provider: groq
+  model: openai/gpt-oss-120b
+  # tentamos "groq/compound" (pesquisa na web automatica) mas retorna 413
+  # "Request Entity Too Large" mesmo com pedido minimo -- parece indisponivel
+  # ou restrito pra essa conta. Sem busca real disponivel, o system prompt
+  # instrui a nao inventar dado/numero especifico sem certeza.
+  requires_env: [GROQ_API_KEY]
+  quota:
+    kind: soft
+    window: daily
+    limit: 1000
