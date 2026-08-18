@@ -13,8 +13,23 @@ from datetime import datetime, timezone
 
 import psycopg2
 import psycopg2.extras
+import psycopg2.pool
 
 LOCAL_USER_ID = "local"
+
+_pool: psycopg2.pool.ThreadedConnectionPool | None = None
+
+
+def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
+    """Pool de conexoes reaproveitadas (lazy, uma por processo). Antes cada
+    get_db() abria uma conexao TCP+auth nova do zero pro Supabase -- rotas que
+    fazem varias queries (ex: GET /jobs/{id}, que junta job+slides+refs) sentiam
+    bastante lentidao por causa disso. ThreadedConnectionPool porque as rotas
+    sync do FastAPI rodam numa threadpool (varias threads concorrentes)."""
+    global _pool
+    if _pool is None:
+        _pool = psycopg2.pool.ThreadedConnectionPool(1, 10, os.environ["DATABASE_URL"])
+    return _pool
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -84,7 +99,10 @@ class _Conn:
     linhas acessiveis por nome de coluna) -- evita reescrever toda chamada."""
 
     def __init__(self):
-        self._conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        self._conn = _get_pool().getconn()
+        self._conn.autocommit = True  # sem isso, uma conexao devolvida ao pool com transacao
+        # aberta (mesmo so de leitura -- psycopg2 sempre abre uma) vazaria pro proximo que pegar
+        # essa conexao emprestada. commit()/executescript() continuam funcionando, so viram no-op.
         self._cursor = self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     def execute(self, query: str, params=()):
@@ -99,7 +117,7 @@ class _Conn:
 
     def close(self):
         self._cursor.close()
-        self._conn.close()
+        _get_pool().putconn(self._conn)
 
 
 def get_db() -> _Conn:
