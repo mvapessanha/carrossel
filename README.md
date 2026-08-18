@@ -93,6 +93,39 @@ PUBLIC_BASE_URL=https://SEU-TUNEL.ngrok-free.app
 Quando o sistema for hospedado de verdade (fase de produto), essa variável
 vira o domínio real e o provedor passa a funcionar sem gambiarra.
 
+## Deploy (Railway)
+
+Uso hoje: poucas pessoas de confiança testando no mesmo link. Orçamento do
+Gemini e a fila de geração (só um job por vez) são **compartilhados por todo
+mundo que acessar** -- ok pra esse cenário, mas não pra um link público aberto
+sem controle nenhum (isso exigiria login por pessoa e orçamento separado,
+ainda não construído).
+
+1. Crie uma conta grátis em https://railway.app (login com GitHub é o mais rápido).
+2. Instale a CLI e faça login (abre o navegador pra autenticar):
+   ```bash
+   npm install -g @railway/cli
+   railway login
+   ```
+3. Dentro da pasta `carrossel-ia`:
+   ```bash
+   railway init
+   railway up
+   ```
+4. No painel do Railway (web), no seu projeto:
+   - **Variables**: cole as mesmas chaves do seu `.env` (`GEMINI_API_KEY`,
+     `GROQ_API_KEY`, `HF_TOKEN`, `POLLINATIONS_TOKEN` se tiver) — nunca comite
+     o `.env` de verdade, só as variáveis no painel.
+   - **Settings → Networking**: gere o domínio público (`*.up.railway.app`) e
+     copie a URL.
+   - Adicione essa URL como `PUBLIC_BASE_URL` nas variáveis também -- isso
+     destrava o Pollinations Kontext (referência de imagem), que só funciona
+     com URL pública de verdade.
+   - **Volume**: crie um volume persistente montado em `/app/data` (Settings →
+     Volumes) -- sem isso, o banco de dados e as imagens geradas somem a cada
+     redeploy.
+5. Depois de configurado, `railway up` de novo aplica qualquer mudança de código.
+
 ## Ajustando a cadeia de IAs
 
 Editar `config/providers.yaml` — dá pra reordenar, ligar/desligar um provedor
