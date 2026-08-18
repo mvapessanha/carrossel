@@ -34,7 +34,10 @@ import httpx
 
 from src.providers.base import GeneratedImage, ImageProvider, ProviderError
 
-API_URL = "https://generativelanguage.googleapis.com/v1/models/{model}:generateContent"
+API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+# v1beta, nao v1: gemini-3-pro-image (Pro) so' existe em v1beta, devolve 404
+# "not found for API version v1" quando chamado em v1 -- v1beta funciona pros
+# dois modelos (Flash tambem), entao usamos v1beta pra ambos.
 
 
 class GeminiNanoBananaProvider(ImageProvider):
