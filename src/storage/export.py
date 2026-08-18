@@ -3,6 +3,7 @@ import io
 import zipfile
 
 from src import db
+from src.storage.images import fetch_bytes
 
 
 def build_job_zip(job_id: str) -> bytes:
@@ -12,7 +13,8 @@ def build_job_zip(job_id: str) -> bytes:
         for slide in slides:
             if not slide["image_path"]:
                 continue
-            arcname = slide["image_path"].split("\\")[-1].split("/")[-1]
-            zf.write(slide["image_path"], arcname=f"slide_{slide['idx']:02d}_{arcname}")
+            ext = slide["image_path"].rsplit(".", 1)[-1].split("?")[0]
+            image_bytes = fetch_bytes(slide["image_path"])
+            zf.writestr(f"slide_{slide['idx']:02d}.{ext}", image_bytes)
     buffer.seek(0)
     return buffer.read()

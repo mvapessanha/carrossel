@@ -19,7 +19,14 @@ class TogetherFluxSchnellProvider(ImageProvider):
     supports_reference = False
     max_reference_images = 0
 
-    def generate(self, prompt: str, reference_images: list[bytes], aspect_ratio: str) -> GeneratedImage:
+    def generate(
+        self,
+        prompt: str,
+        reference_images: list[bytes],
+        aspect_ratio: str,
+        exact_text: str = "",
+        consistency_ref_included: bool = False,
+    ) -> GeneratedImage:
         api_key = os.environ.get("TOGETHER_API_KEY")
         if not api_key:
             raise ProviderError("TOGETHER_API_KEY nao configurada")

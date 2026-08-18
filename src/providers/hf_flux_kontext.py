@@ -28,7 +28,14 @@ class HFFluxKontextProvider(ImageProvider):
     supports_reference = True
     max_reference_images = 1
 
-    def generate(self, prompt: str, reference_images: list[bytes], aspect_ratio: str) -> GeneratedImage:
+    def generate(
+        self,
+        prompt: str,
+        reference_images: list[bytes],
+        aspect_ratio: str,
+        exact_text: str = "",
+        consistency_ref_included: bool = False,
+    ) -> GeneratedImage:
         if not reference_images:
             raise ProviderError("precisa de pelo menos 1 imagem de referencia (esse modelo so edita, nao gera do zero)")
 

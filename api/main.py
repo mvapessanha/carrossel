@@ -21,24 +21,21 @@ from src.planner import attachments
 from src.planner.content_planner import PlannerError, plan_slides
 from src.prompt_builder import build_prompt
 from src.providers.registry import PACING_SECONDS, AllProvidersFailed, generate_with_fallback, get_quota_status
+from src.storage import images as image_storage
 from src.storage.export import build_job_zip
-from src.storage.images import save_job_reference, save_slide_image
+from src.storage.images import fetch_bytes, save_job_reference, save_slide_image
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_DIR / "data"
-GENERATIONS_DIR = DATA_DIR / "generations"
-TMP_REFS_DIR = DATA_DIR / "tmp_refs"
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 MAX_NUM_IMAGES = 10
+ASPECT_RATIO = "4:5"  # Instagram feed/carrossel -- unico valor usado tanto no prompt (build_prompt)
+# quanto na chamada real ao provedor (generate_with_fallback), pra nunca dessincronizar os dois
 
-GENERATIONS_DIR.mkdir(parents=True, exist_ok=True)
-TMP_REFS_DIR.mkdir(parents=True, exist_ok=True)
 db.init_db()
 db.sweep_orphaned_jobs()  # jobs 'pending'/'running' de um processo anterior (servidor reiniciado) nao tem como continuar
+image_storage.ensure_bucket()
 
 app = FastAPI(title="Carrossel IA")
-app.mount("/generations", StaticFiles(directory=str(GENERATIONS_DIR)), name="generations")
-app.mount("/tmp-refs", StaticFiles(directory=str(TMP_REFS_DIR)), name="tmp_refs")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "web" / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "web" / "templates"))
 
@@ -48,8 +45,9 @@ def _is_image(filename: str) -> bool:
 
 
 def _to_url(file_path: str) -> str:
-    rel = Path(file_path).resolve().relative_to(GENERATIONS_DIR.resolve())
-    return f"/generations/{rel.as_posix()}"
+    """image_path/file_path ja vem com a URL publica completa do Supabase
+    Storage (src/storage/images.py) -- nao precisa mais converter nada."""
+    return file_path
 
 
 def _job_detail(job_id: str) -> dict:
@@ -172,16 +170,22 @@ def _run_generation(
             return
 
         slide_id = db.create_slide(job_id, brief.index, brief.role, brief.text)
-        prompt = build_prompt(brief, design_text, num_images)
-        db.set_slide_final_prompt(slide_id, prompt)
+        prompt_result = build_prompt(brief, design_text, num_images, ASPECT_RATIO)
+        db.set_slide_final_prompt(slide_id, prompt_result.full_prompt)
 
         refs_for_call = list(all_reference_bytes)
-        if first_slide_bytes is not None:
+        has_consistency_ref = first_slide_bytes is not None
+        if has_consistency_ref:
             refs_for_call.append(first_slide_bytes)  # ajuda a manter consistencia visual entre slides
 
         try:
             image, provider_id = generate_with_fallback(
-                prompt, refs_for_call, "4:5", preferred_provider_id=established_provider
+                prompt_result.full_prompt,
+                refs_for_call,
+                ASPECT_RATIO,
+                preferred_provider_id=established_provider,
+                exact_text=prompt_result.exact_text,
+                has_consistency_ref=has_consistency_ref,
             )
         except AllProvidersFailed as e:
             db.set_slide_error(slide_id, str(e))
@@ -280,7 +284,7 @@ def create_job(
         ref = db.get_job_reference(ref_id)
         if ref is None:
             continue
-        raw = Path(ref["file_path"]).read_bytes()
+        raw = fetch_bytes(ref["file_path"])
         name = ref["original_filename"] or "referencia.png"
         if ref["kind"] == "design_reference":
             design_ref_bytes.append(raw)

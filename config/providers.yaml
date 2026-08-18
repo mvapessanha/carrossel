@@ -5,9 +5,17 @@
 # Editar esse arquivo (ordem, limites, ligar/desligar um provedor) nao exige mexer em codigo.
 #
 # Descobertas em ago/2026, testando com chaves reais:
-# - Gemini: os 3 modelos de imagem disponiveis devolvem "limit: 0" no tier
-#   gratuito -- GERACAO DE IMAGEM DO GEMINI EXIGE BILLING (Blaze) ATIVADO,
-#   apesar da doc sugerir acesso gratuito. Fica com limit:0 (pulado automatico).
+# - Gemini: os modelos de imagem devolvem "limit: 0" no tier gratuito --
+#   GERACAO DE IMAGEM DO GEMINI EXIGE BILLING (Blaze) ATIVADO, apesar da doc
+#   sugerir acesso gratuito. Fica com limit:0 (pulado automatico).
+# - Gemini tem DUAS variantes de imagem com billing ativado: Flash
+#   (gemini-3.1-flash-image, $0.067/img) e Pro (gemini-3-pro-image,
+#   $0.134/img -- confirmado disponivel via /v1beta/models). A propria Google
+#   recomenda o Pro pra texto longo/preciso em infografico e marketing, e
+#   quem ja usa isso em producao pra carrossel confirma que o Pro renderiza
+#   texto sem distorcer muito melhor que o Flash. Como fidelidade de texto e'
+#   a prioridade #1 do produto, o Pro fica primeiro na cadeia automatica; o
+#   Flash continua disponivel como opcao manual mais barata.
 # - Pollinations Kontext: exige cadastro gratuito no tier "Seed"
 #   (enter.pollinations.ai); mesmo com token, a autenticacao nao "pegou" nos
 #   testes (virou request anonima mesmo assim) -- pode ser bug do lado deles.
@@ -15,16 +23,29 @@
 #   cota mensal de creditos. So aceita 1 imagem de referencia por chamada.
 
 image_providers:
-  - id: gemini_nano_banana
+  - id: gemini_nano_banana_pro
     module: gemini_nano_banana
-    label: "Gemini (Nano Banana 2)"
+    label: "Gemini (Nano Banana Pro)"
     supports_reference: true
     max_reference_images: 14
     quota:
       kind: hard
       window: daily
       limit: 1000  # so uma rede de seguranca contra bug/loop; quem realmente controla o gasto e' o budget_usd abaixo
-    cost_per_image_usd: 0.067  # gemini-3.1-flash-image, melhor modelo disponivel pra essa conta, com billing (Blaze) ativado
+    cost_per_image_usd: 0.134  # gemini-3-pro-image -- melhor renderizacao de texto, ~2x o preco do Flash
+    budget_usd: 5.0  # teto SEPARADO do Flash abaixo (gasto e' rastreado por provedor, nao um pool unico) -- ajuste se quiser mais
+    requires_env: [GEMINI_API_KEY]
+
+  - id: gemini_nano_banana
+    module: gemini_nano_banana
+    label: "Gemini (Nano Banana 2 - Flash)"
+    supports_reference: true
+    max_reference_images: 14
+    quota:
+      kind: hard
+      window: daily
+      limit: 1000  # so uma rede de seguranca contra bug/loop; quem realmente controla o gasto e' o budget_usd abaixo
+    cost_per_image_usd: 0.067  # gemini-3.1-flash-image -- mais barato, qualidade de texto um degrau abaixo do Pro
     budget_usd: 10.0  # teto real de gasto TOTAL (nunca reseta) -- acima disso o provedor para de ser chamado automaticamente
     requires_env: [GEMINI_API_KEY]
 

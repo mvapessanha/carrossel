@@ -24,7 +24,14 @@ class PollinationsFluxProvider(ImageProvider):
     supports_reference = False
     max_reference_images = 0
 
-    def generate(self, prompt: str, reference_images: list[bytes], aspect_ratio: str) -> GeneratedImage:
+    def generate(
+        self,
+        prompt: str,
+        reference_images: list[bytes],
+        aspect_ratio: str,
+        exact_text: str = "",
+        consistency_ref_included: bool = False,
+    ) -> GeneratedImage:
         width, height = aspect_ratio_to_size(aspect_ratio)
         headers = {}
         token = os.environ.get("POLLINATIONS_TOKEN")

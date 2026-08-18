@@ -1,14 +1,19 @@
-"""Camada de dados SQLite: users, jobs, slides, quota_counters.
+"""Camada de dados Postgres (Supabase): users, jobs, slides, quota_counters.
+
+Antes era SQLite local -- migrado pra Postgres porque hospedagem gratuita
+(Render free tier) apaga o disco local a cada ~15min de inatividade. Postgres
+gerenciado (Supabase) e' persistente de verdade.
 
 user_id existe em todo registro desde o dia 1 (fixo em "local" por enquanto)
 para que virar multiusuario no futuro seja trocar autenticacao, nao redesenhar o schema.
 """
-import sqlite3
+import os
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parent.parent / "data" / "carrossel.db"
+import psycopg2
+import psycopg2.extras
+
 LOCAL_USER_ID = "local"
 
 _SCHEMA = """
@@ -38,7 +43,7 @@ CREATE TABLE IF NOT EXISTS slides (
     role TEXT,                       -- 'hook' | 'value' | 'cta' | null
     brief_text TEXT,
     final_prompt TEXT,               -- prompt exato mandado ao provedor de imagem (pra biblioteca mostrar depois)
-    image_path TEXT,
+    image_path TEXT,                 -- URL publica no Supabase Storage (nao caminho local)
     provider_used TEXT,
     status TEXT NOT NULL,            -- 'pending' | 'done' | 'error'
     error_message TEXT,
@@ -49,7 +54,7 @@ CREATE TABLE IF NOT EXISTS job_references (
     id TEXT PRIMARY KEY,
     job_id TEXT NOT NULL REFERENCES jobs(id),
     kind TEXT NOT NULL,              -- 'design_reference' | 'content_attachment'
-    file_path TEXT NOT NULL,
+    file_path TEXT NOT NULL,         -- URL publica no Supabase Storage
     original_filename TEXT,
     created_at TEXT NOT NULL
 );
@@ -73,12 +78,32 @@ CREATE TABLE IF NOT EXISTS provider_spend (
 """
 
 
-def get_db() -> sqlite3.Connection:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+class _Conn:
+    """Wrapper fino pra psycopg2 se comportar como o sqlite3.Connection que o
+    resto do codigo espera (.execute direto na conexao, params com '?',
+    linhas acessiveis por nome de coluna) -- evita reescrever toda chamada."""
+
+    def __init__(self):
+        self._conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        self._cursor = self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    def execute(self, query: str, params=()):
+        self._cursor.execute(query.replace("?", "%s"), params)
+        return self._cursor
+
+    def executescript(self, script: str):
+        self._cursor.execute(script)
+
+    def commit(self):
+        self._conn.commit()
+
+    def close(self):
+        self._cursor.close()
+        self._conn.close()
+
+
+def get_db() -> _Conn:
+    return _Conn()
 
 
 def init_db() -> None:
@@ -86,7 +111,7 @@ def init_db() -> None:
     try:
         conn.executescript(_SCHEMA)
         conn.execute(
-            "INSERT OR IGNORE INTO users (id, created_at) VALUES (?, ?)",
+            "INSERT INTO users (id, created_at) VALUES (?, ?) ON CONFLICT (id) DO NOTHING",
             (LOCAL_USER_ID, _now()),
         )
         _migrate(conn)
@@ -95,10 +120,13 @@ def init_db() -> None:
         conn.close()
 
 
-def _migrate(conn: sqlite3.Connection) -> None:
+def _migrate(conn: _Conn) -> None:
     """Ajustes idempotentes de schema pra bancos criados antes de uma coluna
-    nova existir (evita ter que apagar o carrossel.db a cada mudanca)."""
-    columns = {row["name"] for row in conn.execute("PRAGMA table_info(jobs)")}
+    nova existir (evita ter que recriar o banco a cada mudanca)."""
+    rows = conn.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = 'jobs'"
+    ).fetchall()
+    columns = {row["column_name"] for row in rows}
     if "preferred_provider" not in columns:
         conn.execute("ALTER TABLE jobs ADD COLUMN preferred_provider TEXT")
     if "cancel_requested" not in columns:
@@ -206,7 +234,7 @@ def sweep_orphaned_jobs() -> int:
         conn.close()
 
 
-def get_job(job_id: str) -> sqlite3.Row | None:
+def get_job(job_id: str):
     conn = get_db()
     try:
         return conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
@@ -214,7 +242,7 @@ def get_job(job_id: str) -> sqlite3.Row | None:
         conn.close()
 
 
-def list_jobs(limit: int = 100) -> list[sqlite3.Row]:
+def list_jobs(limit: int = 100):
     conn = get_db()
     try:
         return conn.execute(
@@ -272,7 +300,7 @@ def set_slide_error(slide_id: str, error_message: str) -> None:
         conn.close()
 
 
-def list_slides(job_id: str) -> list[sqlite3.Row]:
+def list_slides(job_id: str):
     conn = get_db()
     try:
         return conn.execute(
@@ -282,7 +310,7 @@ def list_slides(job_id: str) -> list[sqlite3.Row]:
         conn.close()
 
 
-def get_slide(slide_id: str) -> sqlite3.Row | None:
+def get_slide(slide_id: str):
     conn = get_db()
     try:
         return conn.execute("SELECT * FROM slides WHERE id = ?", (slide_id,)).fetchone()
@@ -305,7 +333,7 @@ def create_job_reference(job_id: str, kind: str, file_path: str, original_filena
     return ref_id
 
 
-def list_job_references(job_id: str, kind: str | None = None) -> list[sqlite3.Row]:
+def list_job_references(job_id: str, kind: str | None = None):
     conn = get_db()
     try:
         if kind:
@@ -320,7 +348,7 @@ def list_job_references(job_id: str, kind: str | None = None) -> list[sqlite3.Ro
         conn.close()
 
 
-def get_job_reference(ref_id: str) -> sqlite3.Row | None:
+def get_job_reference(ref_id: str):
     conn = get_db()
     try:
         return conn.execute("SELECT * FROM job_references WHERE id = ?", (ref_id,)).fetchone()
@@ -348,8 +376,8 @@ def add_spend(provider_id: str, amount_usd: float) -> float:
             """INSERT INTO provider_spend (provider_id, spent_usd, call_count, updated_at)
                VALUES (?, ?, 1, ?)
                ON CONFLICT(provider_id) DO UPDATE SET
-                 spent_usd = spent_usd + excluded.spent_usd,
-                 call_count = call_count + 1,
+                 spent_usd = provider_spend.spent_usd + excluded.spent_usd,
+                 call_count = provider_spend.call_count + 1,
                  updated_at = excluded.updated_at""",
             (provider_id, amount_usd, _now()),
         )

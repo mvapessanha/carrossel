@@ -2,8 +2,8 @@
 Descoberta em ago/2026: kontext exige cadastro gratuito no tier "Seed"
 (https://enter.pollinations.ai) e um token; sem POLLINATIONS_TOKEN no .env
 esse provedor falha (500) e cai automaticamente pro proximo da cadeia.
-Limitacao adicional: o parametro 'image' exige URL publica, entao so funciona
-com referencia se PUBLIC_BASE_URL estiver configurada (ver src/storage/images.py).
+O parametro 'image' exige URL publica -- como as referencias agora sobem pro
+Supabase Storage (sempre publico), isso funciona direto, sem gambiarra.
 """
 import os
 from urllib.parse import quote
@@ -16,7 +16,7 @@ from src.providers.base import (
     get_with_retry,
     sanitize_for_url_path,
 )
-from src.storage.images import PublicUrlUnavailable, publish_temp_reference
+from src.storage.images import publish_temp_reference
 
 BASE_URL = "https://image.pollinations.ai/prompt"
 
@@ -27,18 +27,22 @@ class PollinationsKontextProvider(ImageProvider):
     supports_reference = True
     max_reference_images = 4
 
-    def generate(self, prompt: str, reference_images: list[bytes], aspect_ratio: str) -> GeneratedImage:
+    def generate(
+        self,
+        prompt: str,
+        reference_images: list[bytes],
+        aspect_ratio: str,
+        exact_text: str = "",
+        consistency_ref_included: bool = False,
+    ) -> GeneratedImage:
         width, height = aspect_ratio_to_size(aspect_ratio)
         params = {"model": "kontext", "width": width, "height": height, "nologo": "true"}
 
         if reference_images:
             try:
                 urls = [publish_temp_reference(img) for img in reference_images[: self.max_reference_images]]
-            except PublicUrlUnavailable as e:
-                raise ProviderError(
-                    "Pollinations Kontext precisa de imagens de referencia em URL publica; "
-                    "configure PUBLIC_BASE_URL no .env para habilitar este provedor com referencia."
-                ) from e
+            except Exception as e:
+                raise ProviderError(f"Falha ao publicar imagem de referencia: {e}") from e
             params["image"] = "|".join(urls)
 
         headers = {}

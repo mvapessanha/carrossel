@@ -37,12 +37,17 @@ pip install -r requirements.txt
 
 - **Groq** (obrigatório) — divide o texto entre os slides. Grátis, sem
   cartão. Crie em https://console.groq.com/keys
-- **Gemini** (opcional, mas hoje não funciona sem billing) — testado com
-  chave real em ago/2026: os 3 modelos de imagem disponíveis devolvem
-  `limit: 0` no tier gratuito. Ou seja, **geração de imagem do Gemini via API
-  exige billing (Blaze) ativado no projeto Google** — não é gratuito de fato
-  pra essa finalidade, mesmo a doc sugerindo o contrário. Fica com cota 0 no
-  `config/providers.yaml` (pulado automaticamente) até isso mudar.
+- **Gemini** (recomendado, melhor qualidade, mas é pago) — testado com chave
+  real em ago/2026: **geração de imagem do Gemini exige billing (Blaze)
+  ativado no projeto Google**, mesmo a doc sugerindo tier grátis — o tier
+  grátis devolve `limit: 0`. Duas variantes configuradas em
+  `config/providers.yaml`, cada uma com teto de gasto próprio
+  (`budget_usd`, nunca reseta sozinho): Nano Banana Pro (`gemini-3-pro-image`,
+  ~US$0.134/imagem, melhor pra texto longo/preciso) e Nano Banana 2 Flash
+  (`gemini-3.1-flash-image`, ~US$0.067/imagem, mais barato). Sem
+  `GEMINI_API_KEY`, o sistema cai pros provedores grátis abaixo.
+- **Supabase** (obrigatório pra hospedar de verdade) — ver seção "Deploy"
+  abaixo. Sem isso, roda só local com SQLite/disco.
 - **Pollinations "Seed"** (recomendado, grátis) — cadastro em
   https://enter.pollinations.ai. Sem isso, o sistema usa só o tier anônimo:
   funciona, mas é mais lento (~1 chamada a cada 15s) e a qualidade das
@@ -75,25 +80,7 @@ anônimo (último da cadeia). Qualidade inconsistente entre slides do mesmo
 carrossel (ver acima) — pra resultado confiável, vale a pena o cadastro
 gratuito no Pollinations Seed.
 
-## Limitação conhecida: Pollinations Kontext e referência de imagem
-
-Mesmo com `POLLINATIONS_TOKEN` configurado, o Kontext só consegue usar
-imagens de referência se elas estiverem numa **URL pública** — e rodando
-localmente (`localhost`) isso não é possível, porque o servidor deles não
-alcança sua máquina. Sem isso, esse provedor é pulado automaticamente quando
-há referência de design.
-
-Se quiser habilitar isso mesmo local, exponha o servidor com um túnel (ex:
-`ngrok http 8000`) e configure no `.env`:
-
-```
-PUBLIC_BASE_URL=https://SEU-TUNEL.ngrok-free.app
-```
-
-Quando o sistema for hospedado de verdade (fase de produto), essa variável
-vira o domínio real e o provedor passa a funcionar sem gambiarra.
-
-## Deploy (Railway)
+## Deploy (Render + Supabase)
 
 Uso hoje: poucas pessoas de confiança testando no mesmo link. Orçamento do
 Gemini e a fila de geração (só um job por vez) são **compartilhados por todo
@@ -101,30 +88,50 @@ mundo que acessar** -- ok pra esse cenário, mas não pra um link público abert
 sem controle nenhum (isso exigiria login por pessoa e orçamento separado,
 ainda não construído).
 
-1. Crie uma conta grátis em https://railway.app (login com GitHub é o mais rápido).
-2. Instale a CLI e faça login (abre o navegador pra autenticar):
-   ```bash
-   npm install -g @railway/cli
-   railway login
-   ```
-3. Dentro da pasta `carrossel-ia`:
-   ```bash
-   railway init
-   railway up
-   ```
-4. No painel do Railway (web), no seu projeto:
-   - **Variables**: cole as mesmas chaves do seu `.env` (`GEMINI_API_KEY`,
-     `GROQ_API_KEY`, `HF_TOKEN`, `POLLINATIONS_TOKEN` se tiver) — nunca comite
-     o `.env` de verdade, só as variáveis no painel.
-   - **Settings → Networking**: gere o domínio público (`*.up.railway.app`) e
-     copie a URL.
-   - Adicione essa URL como `PUBLIC_BASE_URL` nas variáveis também -- isso
-     destrava o Pollinations Kontext (referência de imagem), que só funciona
-     com URL pública de verdade.
-   - **Volume**: crie um volume persistente montado em `/app/data` (Settings →
-     Volumes) -- sem isso, o banco de dados e as imagens geradas somem a cada
-     redeploy.
-5. Depois de configurado, `railway up` de novo aplica qualquer mudança de código.
+Render free tier tem **disco efêmero** (apaga tudo a cada ~15min de
+inatividade) -- por isso o banco de dados vive no Postgres do Supabase e as
+imagens no Storage do Supabase, não em disco local. Sem isso, cada sono do
+servidor grátis apagaria a biblioteca inteira.
+
+### 1. Criar o projeto no Supabase (grátis, sem cartão)
+
+1. Crie uma conta em https://supabase.com e um novo projeto.
+2. Pegue as 3 credenciais e cole no `.env` local primeiro pra testar
+   (ver `.env.example` pra onde achar cada uma):
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_KEY`
+   - `DATABASE_URL` (use a variante **Transaction pooler**, porta 6543 --
+     a conexão direta padrão é só IPv6 e o Render não alcança)
+3. Rode local (`uvicorn api.main:app --reload`) uma vez -- isso cria as
+   tabelas e o bucket de imagens automaticamente no Supabase.
+
+### 2. Subir o código pro GitHub
+
+```bash
+git add -A
+git commit -m "sua mensagem"
+git push
+```
+
+### 3. Criar o Web Service no Render (grátis, sem cartão)
+
+1. Crie uma conta em https://render.com (login com GitHub é o mais rápido).
+2. **New → Blueprint**, conecte o repositório do GitHub -- o Render detecta
+   o `render.yaml` deste projeto automaticamente e já propõe o serviço
+   configurado (build/start command certos).
+3. Na tela de variáveis de ambiente, cole os valores reais (os mesmos do seu
+   `.env` local): `GEMINI_API_KEY`, `GROQ_API_KEY`, `HF_TOKEN`,
+   `POLLINATIONS_TOKEN`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`,
+   `DATABASE_URL`. Nunca comite o `.env` de verdade, só cole aqui no painel.
+4. Deploy. Depois de pronto, o Render dá a URL pública (`*.onrender.com`) --
+   esse já é o link final pra mandar pra quem for testar.
+5. Qualquer `git push` depois disso re-implanta automaticamente.
+
+**Nota sobre o free tier do Render**: o servidor "dorme" depois de ~15min sem
+acesso e demora uns 30-50s pra acordar na próxima visita (plano grátis não
+tem como evitar isso) -- mas como os dados agora vivem no Supabase, nada se
+perde durante esse sono, só demora a primeira resposta depois de um tempo
+parado.
 
 ## Ajustando a cadeia de IAs
 
@@ -137,12 +144,15 @@ estimativas conservadoras; ajuste conforme o que você observar de uso real
 
 ```
 config/providers.yaml   -> ordem da cadeia de fallback + limites de cota
+src/db.py               -> Postgres (Supabase) -- jobs, slides, cota, gasto por provedor
 src/planner/            -> divide o conteúdo entre os slides (Groq)
 src/providers/          -> um adapter por IA de imagem + o registry (fallback)
 src/quota/              -> contador de uso por provedor
-src/storage/            -> imagens geradas em disco + zip do carrossel
+src/storage/            -> imagens no Supabase Storage (bucket público) + zip do carrossel
+src/prompt_builder.py   -> monta o prompt único mandado pro gerador de imagem
 src/edit.py             -> editar um slide já gerado
 api/main.py             -> API FastAPI (todos os endpoints)
 web/                    -> formulário de criação + biblioteca
-data/                   -> gerado em runtime (banco SQLite + imagens), gitignored
+render.yaml             -> blueprint de deploy do Render
+data/                   -> só cache/scratch local (não é mais a fonte real dos dados), gitignored
 ```

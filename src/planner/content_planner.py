@@ -50,6 +50,13 @@ carrossel do Instagram:
   coerente com o conteudo (role="cta").
 - Se o conteudo ja disser explicitamente o que colocar em cada slide/imagem,
   respeite isso ao inves de redividir por conta propria.
+- TEXTO CURTO POR SLIDE, sempre que o conteudo permitir: carrossel que converte
+  tem pouco texto por imagem, escaneavel num relance -- nao um paragrafo denso.
+  Dentro dos N slides pedidos, prefira uma frase de impacto curta (ate ~12-15
+  palavras) por slide; se o assunto de um slide especifico precisar de mais,
+  quebre em titulo curto + 1-2 frases curtas de apoio, nunca um bloco continuo
+  longo. Isso nao e' cortar informacao -- e' distribuir o MESMO conteudo de
+  forma mais legivel entre os slides que ja existem.
 - Se a pessoa ja forneceu dados/numeros especificos (taxas, datas,
   estatisticas etc.), use exatamente esses.
 - Se o conteudo for vago/generico e voce NAO tiver certeza de um numero,

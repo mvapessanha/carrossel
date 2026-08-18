@@ -28,10 +28,27 @@ class ImageProvider(ABC):
     max_reference_images: int
 
     @abstractmethod
-    def generate(self, prompt: str, reference_images: list[bytes], aspect_ratio: str) -> GeneratedImage:
+    def generate(
+        self,
+        prompt: str,
+        reference_images: list[bytes],
+        aspect_ratio: str,
+        exact_text: str = "",
+        consistency_ref_included: bool = False,
+    ) -> GeneratedImage:
         """Gera uma imagem a partir do prompt + ate max_reference_images imagens
         de referencia (ja truncadas pelo chamador). Deve levantar ProviderError
-        em qualquer falha, nunca deixar uma excecao generica vazar."""
+        em qualquer falha, nunca deixar uma excecao generica vazar.
+
+        exact_text: o texto literal que precisa aparecer na imagem, sem o resto
+        do prompt ao redor -- so os provedores que se beneficiam disso (Gemini,
+        com a tecnica de confirmar o texto num turno antes de pedir a imagem)
+        precisam usar; os demais ignoram.
+
+        consistency_ref_included: quando True, o ULTIMO item de reference_images
+        e' o slide anterior do mesmo carrossel (pra consistencia visual), nao uma
+        referencia de estetica do usuario -- so importa pra provedores que rotulam
+        o papel de cada imagem de referencia individualmente."""
 
 
 # Instagram feed/carrossel favorece retrato 4:5; usado como padrao pelos adapters.
